@@ -61,7 +61,7 @@ class ChatController extends Controller
             report($e);
 
             return response()->json([
-                'error' => 'The assistant is temporarily unavailable. Please try again shortly.',
+                'error' => 'Ассистент временно недоступен. Попробуй чуть позже.',
             ], 503);
         }
 

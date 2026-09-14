@@ -4,21 +4,20 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use App\Services\Atheer\AtheerApiClient;
+use App\Support\Money\MoneyReporter;
 use App\Support\Reports\Period;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
-use Throwable;
 
 /**
- * Period reports: business finance over a selectable window (day … year),
- * pulled from the Atheer report API. Other sections join once they have data.
+ * Period reports: the whole money picture over a selectable window (day …
+ * year) — Atheer plus the money-bearing sections, netted by the MoneyReporter.
  */
 class ReportsController extends Controller
 {
-    public function __construct(private readonly AtheerApiClient $atheer) {}
+    public function __construct(private readonly MoneyReporter $money) {}
 
     public function index(Request $request): Response
     {
@@ -28,14 +27,13 @@ class ReportsController extends Controller
             $period = Period::make('month', null);
         }
 
-        try {
-            $finance = $this->atheer->finance($period->fromDate(), $period->toDate());
-            $error = null;
-        } catch (Throwable $e) {
-            report($e);
-            $finance = null;
-            $error = 'Atheer ERP is temporarily unavailable.';
-        }
+        $userId = (int) $request->user()->getAuthIdentifier();
+        $report = $this->money->report($userId, $period->fromDate(), $period->toDate());
+
+        $atheer = collect($report['sources'])->firstWhere('key', 'atheer');
+        $error = ($atheer !== null && $atheer['available'] === false)
+            ? 'Atheer ERP временно недоступен — его показатели показаны как ноль.'
+            : null;
 
         return Inertia::render('Reports', [
             'period' => [
@@ -43,7 +41,7 @@ class ReportsController extends Controller
                 'canGoNext' => ! $period->isCurrentOrLatest(),
             ],
             'types' => Period::TYPES,
-            'finance' => $finance,
+            'report' => $report,
             'error' => $error,
         ]);
     }

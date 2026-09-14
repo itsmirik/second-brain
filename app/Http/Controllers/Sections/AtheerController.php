@@ -27,7 +27,7 @@ class AtheerController extends Controller
         } catch (Throwable $e) {
             report($e);
             $report = null;
-            $error = 'Atheer ERP is temporarily unavailable.';
+            $error = 'Atheer ERP временно недоступен.';
         }
 
         return Inertia::render('sections/Atheer', [

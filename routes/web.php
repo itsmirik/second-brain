@@ -7,6 +7,7 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\Sections\AtheerController;
+use App\Http\Controllers\Sections\CharityController;
 use App\Http\Controllers\Sections\SectionController;
 use App\Support\Dashboard\Sections;
 use Illuminate\Support\Facades\Route;
@@ -31,9 +32,19 @@ Route::middleware('auth')->group(function (): void {
     // route today; the rest render placeholders in later sub-tracks.
     Route::get('atheer', [AtheerController::class, 'index'])->name('sections.atheer');
 
+    // Charity has its own page (monthly obligation maths), not the generic one.
+    Route::get('charity', [CharityController::class, 'index'])->name('sections.charity');
+    Route::post('charity/giving', [CharityController::class, 'store'])->name('charity.giving.store');
+    Route::put('charity/settings', [CharityController::class, 'updateSettings'])->name('charity.settings');
+    Route::put('charity/profit', [CharityController::class, 'updateProfit'])->name('charity.profit');
+
     // Generic entries-backed sections (Personal, Health, Budget, ...), one set
     // of routes per live section key from config/dashboard.php.
     foreach (Sections::entryKeys() as $sectionKey) {
+        if ($sectionKey === 'charity') {
+            continue; // handled by CharityController above
+        }
+
         Route::get($sectionKey, [SectionController::class, 'show'])
             ->defaults('section', $sectionKey)
             ->name("sections.{$sectionKey}");
@@ -43,9 +54,11 @@ Route::middleware('auth')->group(function (): void {
             ->name("sections.{$sectionKey}.entries.store");
     }
 
+    // Edit / move / delete any entry (the owner's fix for a mis-filed bot entry).
+    Route::put('entries/{entry}', [SectionController::class, 'updateEntry'])->name('entries.update');
     Route::delete('entries/{entry}', [SectionController::class, 'destroyEntry'])->name('entries.destroy');
 
-    // Period reports (finance over a selectable day…year window).
+    // Period reports (whole-money over a selectable day…year window).
     Route::get('reports', [ReportsController::class, 'index'])->name('reports');
 
     // Web chat with the second brain (same agent as the Telegram bot).

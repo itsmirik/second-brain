@@ -32,6 +32,8 @@ const paths: Record<string, string[]> = {
     left: ['M15 6l-6 6 6 6'],
     right: ['M9 6l6 6-6 6'],
     trash: ['M4 7h16', 'M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2', 'M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13'],
+    pencil: ['M4 20h4L18.5 9.5a2 2 0 0 0-2.83-2.83L5 17.5V20z', 'M13.5 7.5l3 3'],
+    gift: ['M20 12v9H4v-9', 'M2 7h20v5H2z', 'M12 22V7', 'M12 7S11 3 8.5 3 6 5.5 8 7h4Z', 'M12 7s1-4 3.5-4 2.5 2.5.5 4h-4Z'],
 };
 
 const props = withDefaults(

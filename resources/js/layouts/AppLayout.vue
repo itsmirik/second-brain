@@ -50,7 +50,7 @@ function logout() {
                     "
                 >
                     <Icon name="grid" :size="18" />
-                    Dashboard
+                    Главная
                 </Link>
 
                 <Link
@@ -63,7 +63,7 @@ function logout() {
                     "
                 >
                     <Icon name="chart" :size="18" />
-                    Reports
+                    Отчёты
                 </Link>
 
                 <Link
@@ -76,11 +76,11 @@ function logout() {
                     "
                 >
                     <Icon name="chat" :size="18" />
-                    Chat
+                    Чат
                 </Link>
 
                 <p class="px-3 pt-4 pb-1 text-xs font-semibold tracking-wide text-neutral-400 uppercase">
-                    Sections
+                    Разделы
                 </p>
 
                 <template v-for="section in sections" :key="section.key">
@@ -105,7 +105,7 @@ function logout() {
                         <Icon :name="section.icon" :size="18" />
                         <span class="flex-1">{{ section.label }}</span>
                         <span class="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-neutral-400 uppercase dark:bg-neutral-800">
-                            soon
+                            скоро
                         </span>
                     </div>
                 </template>
@@ -132,7 +132,7 @@ function logout() {
                     >
                         <Icon name="menu" />
                     </button>
-                    <h1 class="text-base font-semibold">{{ props.title ?? 'Dashboard' }}</h1>
+                    <h1 class="text-base font-semibold">{{ props.title ?? 'Главная' }}</h1>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -145,7 +145,7 @@ function logout() {
                         @click="logout"
                     >
                         <Icon name="logout" :size="18" />
-                        <span class="hidden sm:inline">Log out</span>
+                        <span class="hidden sm:inline">Выйти</span>
                     </button>
                 </div>
             </header>

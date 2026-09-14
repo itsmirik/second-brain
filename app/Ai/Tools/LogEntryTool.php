@@ -35,14 +35,17 @@ final class LogEntryTool implements Tool
         calling this tool.
 
         Sections: {$sections}.
-        - budget: household income/expenses (use amount).
-        - home-business: side-venture money (use amount).
+        - budget: household money. Use amount, and SIGN it: income is positive,
+          an expense is NEGATIVE (e.g. spent 80000 -> amount -80000).
+        - home-business: side-venture money, same signing rule as budget.
+        - charity: sadaqa / donations the owner GAVE. Use a positive amount.
         - health: health journal (no amount).
-        - family: family matters and charity/sadaqa giving (no amount).
+        - family: family matters, relatives, household life (no amount).
         - personal: notes, ideas, reminders (no amount).
 
-        Pick the closest section. Charity/sadaqa goes in family. Put the money
-        value in "amount" (numeric, so'm) only for budget and home-business.
+        Pick the closest section and state which one you chose in your reply. If
+        it is genuinely unclear which section fits, ask the owner first instead
+        of guessing. Charity/sadaqa giving goes in "charity", never "family".
         TEXT;
     }
 

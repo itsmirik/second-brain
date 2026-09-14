@@ -13,6 +13,7 @@ export type Section = {
 
 export type Entry = {
     id: number;
+    section: string;
     body: string;
     amount: number | null;
     occurred_at: string;

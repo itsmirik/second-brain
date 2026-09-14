@@ -2,23 +2,23 @@
 import Icon from '@/components/Icon.vue';
 import StatCard from '@/components/StatCard.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { count, money } from '@/lib/format';
-import type { Finance, PeriodMeta, PeriodType } from '@/types';
+import { money } from '@/lib/format';
+import type { MoneyReport, PeriodMeta, PeriodType } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 
 const props = defineProps<{
     period: PeriodMeta;
     types: PeriodType[];
-    finance: Finance | null;
+    report: MoneyReport;
     error: string | null;
 }>();
 
 const typeLabels: Record<PeriodType, string> = {
-    day: 'Day',
-    week: 'Week',
-    month: 'Month',
-    quarter: 'Quarter',
-    year: 'Year',
+    day: 'День',
+    week: 'Неделя',
+    month: 'Месяц',
+    quarter: 'Квартал',
+    year: 'Год',
 };
 
 function go(type: PeriodType, date?: string) {
@@ -40,13 +40,13 @@ function step(date: string) {
 </script>
 
 <template>
-    <Head title="Reports" />
+    <Head title="Отчёты" />
 
-    <AppLayout title="Reports">
+    <AppLayout title="Отчёты">
         <div class="mb-6">
-            <h2 class="text-xl font-semibold">Reports</h2>
+            <h2 class="text-xl font-semibold">Отчёты</h2>
             <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                Business finance over a period.
+                Все деньги — Atheer, бюджет и домашний бизнес — за период.
             </p>
         </div>
 
@@ -73,7 +73,7 @@ function step(date: string) {
             <button
                 type="button"
                 class="rounded-md border border-neutral-300 p-1.5 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                aria-label="Previous period"
+                aria-label="Предыдущий период"
                 @click="step(period.previous)"
             >
                 <Icon name="left" :size="18" />
@@ -83,7 +83,7 @@ function step(date: string) {
                 type="button"
                 :disabled="!period.canGoNext"
                 class="rounded-md border border-neutral-300 p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 disabled:hover:bg-transparent dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                aria-label="Next period"
+                aria-label="Следующий период"
                 @click="period.canGoNext && step(period.next)"
             >
                 <Icon name="right" :size="18" />
@@ -93,18 +93,58 @@ function step(date: string) {
         <!-- Unavailable banner -->
         <div
             v-if="error"
-            class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300"
+            class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-300"
         >
-            {{ error }} Figures could not be loaded for this period.
+            {{ error }}
         </div>
 
-        <!-- Finance figures -->
-        <div v-else-if="finance" class="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <StatCard label="Revenue" :value="money(finance.revenue)" />
-            <StatCard label="Profit" :value="money(finance.profit)" tone="positive" />
-            <StatCard label="Refunds" :value="money(finance.refunds)" tone="negative" />
-            <StatCard label="Net" :value="money(finance.net)" />
-            <StatCard label="Orders" :value="count(finance.orders_count)" />
+        <!-- Totals -->
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard label="Доходы" :value="money(report.income)" tone="positive" />
+            <StatCard label="Расходы" :value="money(report.expense)" tone="negative" />
+            <StatCard label="Чистая прибыль" :value="money(report.net)" :tone="report.net >= 0 ? 'positive' : 'negative'" />
+            <StatCard label="Отдано на садака" :value="money(report.charity_given)" sub="не входит в чистую прибыль" />
+        </div>
+
+        <!-- Per-source breakdown -->
+        <h3 class="mt-8 mb-3 text-sm font-semibold tracking-wide text-neutral-500 uppercase">
+            По источникам
+        </h3>
+        <div class="overflow-x-auto rounded-xl border border-neutral-200 dark:border-neutral-800">
+            <table class="w-full text-sm">
+                <thead class="bg-neutral-50 text-left text-xs tracking-wide text-neutral-500 uppercase dark:bg-neutral-900">
+                    <tr>
+                        <th class="px-4 py-2 font-medium">Источник</th>
+                        <th class="px-4 py-2 text-right font-medium">Доходы</th>
+                        <th class="px-4 py-2 text-right font-medium">Расходы</th>
+                        <th class="px-4 py-2 text-right font-medium">Итого</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="s in report.sources"
+                        :key="s.key"
+                        class="border-t border-neutral-100 dark:border-neutral-800/70"
+                    >
+                        <td class="px-4 py-2.5">
+                            {{ s.label }}
+                            <span
+                                v-if="!s.available"
+                                class="ml-1 text-xs text-amber-600 dark:text-amber-400"
+                                >(нет данных)</span
+                            >
+                        </td>
+                        <td class="px-4 py-2.5 text-right tabular-nums">{{ money(s.income) }}</td>
+                        <td class="px-4 py-2.5 text-right tabular-nums">{{ money(s.expense) }}</td>
+                        <td
+                            class="px-4 py-2.5 text-right font-medium tabular-nums"
+                            :class="s.net >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                        >
+                            {{ money(s.net) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </AppLayout>
 </template>

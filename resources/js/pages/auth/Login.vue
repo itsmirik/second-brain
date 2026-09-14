@@ -21,7 +21,7 @@ function submit() {
 </script>
 
 <template>
-    <Head title="Log in" />
+    <Head title="Вход" />
 
     <div class="flex min-h-screen items-center justify-center bg-neutral-50 p-6 dark:bg-neutral-950">
         <div class="w-full max-w-sm">
@@ -30,7 +30,7 @@ function submit() {
                     <Icon name="grid" :size="24" />
                 </div>
                 <h1 class="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                    Sign in
+                    Вход
                 </h1>
             </div>
 
@@ -47,7 +47,7 @@ function submit() {
             >
                 <div>
                     <label class="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300" for="email">
-                        Email
+                        Эл. почта
                     </label>
                     <input
                         id="email"
@@ -65,7 +65,7 @@ function submit() {
 
                 <div>
                     <label class="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300" for="password">
-                        Password
+                        Пароль
                     </label>
                     <input
                         id="password"
@@ -82,7 +82,7 @@ function submit() {
 
                 <label class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
                     <input v-model="form.remember" type="checkbox" class="rounded border-neutral-300" />
-                    Remember me
+                    Запомнить меня
                 </label>
 
                 <button
@@ -90,7 +90,7 @@ function submit() {
                     :disabled="form.processing"
                     class="mt-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
                 >
-                    {{ form.processing ? 'Signing in…' : 'Sign in' }}
+                    {{ form.processing ? 'Вход…' : 'Войти' }}
                 </button>
             </form>
         </div>

@@ -75,11 +75,11 @@ final class Period
     public function label(): string
     {
         return match ($this->type) {
-            'day' => $this->from()->format('D, d M Y'),
-            'week' => $this->from()->format('d M').' – '.$this->to()->format('d M Y'),
-            'month' => $this->from()->format('F Y'),
-            'quarter' => 'Q'.$this->from()->quarter.' '.$this->from()->year,
-            'year' => (string) $this->from()->year,
+            'day' => $this->from()->translatedFormat('D, d M Y'),
+            'week' => $this->from()->translatedFormat('d M').' – '.$this->to()->translatedFormat('d M Y'),
+            'month' => $this->from()->translatedFormat('F Y'),
+            'quarter' => $this->from()->quarter.' кв. '.$this->from()->year,
+            'year' => $this->from()->year.' г.',
             default => throw $this->unknownType(),
         };
     }

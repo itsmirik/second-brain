@@ -1,0 +1,136 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A private, **single-owner** "second brain": a Laravel 13 + Inertia/Vue 3 dashboard plus a
+Telegram bot, both driven by one AI agent. The owner logs facts in free-text Russian
+(via Telegram or web chat) and the agent files them into life sections; the dashboard
+shows those entries, live figures from an external ERP (Atheer), period money reports,
+and a charity (sadaqa) obligation calculation.
+
+There is no public registration and no multi-tenancy. The one user is created with
+`php artisan app:create-owner`. UI language is Russian (`APP_LOCALE=ru`); code, comments,
+and commits are English.
+
+## Commands
+
+```bash
+composer setup        # install deps, .env, key, migrate, npm install, build
+composer dev          # php artisan dev → serve + queue:listen + pail + vite (all four)
+composer ci:check     # what CI runs: npm run check, vue-tsc, then composer test
+composer test         # config:clear + pint --test + phpstan + php artisan test
+composer lint         # pint --parallel (write)
+composer types:check  # phpstan (larastan level 7 over app/ bootstrap/ config/ database/ routes/)
+npm run check         # vite-plus lint (typeAware, denyWarnings)
+npm run check:fix
+npm run types:check   # vue-tsc --noEmit
+
+php artisan test --filter=SomeTest          # single test / method
+php artisan test tests/Feature/FooTest.php   # single file
+php artisan telegram:set-webhook [url]      # register webhook + secret with the Bot API
+php artisan app:create-owner                # create/update the sole login
+```
+
+Queue is `database` — a queue worker must be running or Telegram messages are never
+answered. `composer dev` starts one.
+
+## Architecture
+
+### Two entry points, one agent
+
+- **Web** (`routes/web.php`): everything behind `auth` session middleware. Inertia pages.
+- **Telegram** (`routes/telegram.php`): the *only* unauthenticated internet-facing route,
+  registered in `bootstrap/app.php` **outside** the `web` group (no session/CSRF/Inertia)
+  with `throttle:telegram`.
+
+The webhook path is deliberately layered, and each layer re-checks:
+
+```
+VerifyTelegramWebhook (X-Telegram-Bot-Api-Secret-Token)
+  → TelegramWebhookController  (parse, drop non-owner chat_id, dedupe on update_id
+                                via insertOrIgnore on activity_logs, ack in ms)
+    → ProcessTelegramUpdate (queued, tries=3, backoff 5/15/30; re-verifies chat_id)
+      → HandleTelegramMessage (prompt agent, send reply, log 'out' row)
+```
+
+`TELEGRAM_ALLOWED_CHAT_ID` lives in env, never the DB, so it cannot be changed through
+the app. `activity_logs` stores **metadata only** — never message content.
+
+### The agent (`app/Ai/`)
+
+`SecondBrainAgent` (laravel/ai) is the single brain used by both the bot and the web chat.
+Application code never touches a vendor SDK — it prompts this agent. `provider()` returns
+an Anthropic → OpenAI → Gemini failover list filtered to providers that actually have a key,
+ordered so `AI_DEFAULT_PROVIDER` goes first; an empty list surfaces a clear error.
+
+Tools live in `app/Ai/Tools/` and are the only way the model can *do* anything:
+- `LogEntryTool` — writes an `Entry`. Its description encodes the sign convention and
+  section routing rules; the system prompt forbids claiming a save without calling it.
+- `AtheerReportsTool` — read-only ERP reports, returns raw JSON for the model to phrase.
+
+Agent/tool stubs are in `stubs/` (`php artisan make:agent`, `make:tool`).
+
+### Sections are config-driven
+
+`config/dashboard.php` is the source of truth for the owner's life sections. Each has
+`driver` (`entries` = generic log in the `entries` table, `atheer` = external ERP),
+`money` (does it carry amounts), `status` (`live` | `planned`).
+
+`App\Support\Dashboard\Sections` is the accessor. **`routes/web.php` registers routes in a
+loop over `Sections::entryKeys()`**, and `HandleInertiaRequests` shares the section list
+globally so the sidebar renders everywhere. Adding a live entries section = add a config
+entry; no controller changes. `charity` is the exception: it is entries-backed but has its
+own `CharityController` (monthly obligation maths) and is skipped in that loop.
+
+### Money
+
+Sign convention, applied everywhere: **income positive, expense negative**. The web form
+takes a positive amount + `direction` and `SectionController::signedAmount()` signs it;
+`LogEntryTool` expects the model to send it already signed.
+
+`App\Support\Money\MoneyReporter` is the one place that nets everything — Atheer ERP plus
+the money sections (`budget`, `home-business`) — into per-source income/expense/net plus a
+grand net. `Reports` uses it directly; `CharityService` uses its `profit()` as the base for
+`profit × percentage`. Charity giving is deliberately **not** in the profit base (obligation
+is computed on profit *before* giving) and lives in its own section.
+
+`App\Support\Reports\Period` turns a period type (day…year) + anchor date into `[from, to]`,
+a Russian label, and prev/next anchors, so neither controllers nor the UI do date maths.
+
+Charity percentage and manual monthly profit overrides are rows in the generic per-user
+`settings` key/value table (`charity.percentage`, `charity.profit.YYYY-MM`) via
+`Setting::get()/put()`.
+
+### Degradation
+
+The Atheer ERP is a separate co-deployed app reached over HTTP (`AtheerApiClient`, cached
+`ATHEER_CACHE_TTL` seconds). Every consumer must keep working when it is down: pages render
+with an `error` prop instead of throwing, `MoneyReporter` reports the source as
+`available: false` with zeros, the tool returns a plain "temporarily unavailable" string,
+and `HandleTelegramMessage` always sends *some* reply rather than failing the job.
+
+### Frontend
+
+Inertia + Vue 3 `<script setup>`, Tailwind v4, no UI component library. Pages in
+`resources/js/pages/`, single `AppLayout.vue`, shared props are `name`, `auth.user`,
+`sections`. Formatting helpers (`money`, `count`, `shortDate` — all `ru-RU`, UZS "сум")
+live in `resources/js/lib/format.ts`; use them rather than inlining `Intl`.
+
+`resources/js/actions/`, `resources/js/routes/`, and `resources/js/wayfinder/` are
+**generated by Wayfinder** from PHP controllers/routes — never hand-edit them; they are
+excluded from lint and formatting.
+
+## Conventions
+
+- `declare(strict_types=1);` in all application PHP (the framework-scaffolded files
+  predating it are the exception).
+- Typed properties, constructor promotion, `readonly` on service/DTO dependencies;
+  services are bound as singletons via `fromConfig()` factories in `AppServiceProvider`.
+- Dates: `Date::use(CarbonImmutable::class)` is set globally — use the `Date` facade, and
+  expect `CarbonImmutable` everywhere.
+- Ownership checks are explicit: entry mutations `abort_unless` the `user_id` matches the
+  authenticated user.
+- `tests/` currently holds only the scaffold (`tests/Unit/ExampleTest.php`); Feature tests
+  have no directory yet — create `tests/Feature/` when adding one.

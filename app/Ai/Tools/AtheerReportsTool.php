@@ -20,9 +20,7 @@ final class AtheerReportsTool implements Tool
 {
     private const REPORTS = ['summary', 'funnel', 'deliveries', 'reconciliation', 'finance'];
 
-    public function __construct(private readonly AtheerApiClient $atheer)
-    {
-    }
+    public function __construct(private readonly AtheerApiClient $atheer) {}
 
     public function description(): string
     {
@@ -44,18 +42,18 @@ final class AtheerReportsTool implements Tool
                 ->description('Which report to fetch.')
                 ->enum(self::REPORTS)
                 ->required(),
-            'from'   => $schema->string()
+            'from' => $schema->string()
                 ->description('Finance only: start date YYYY-MM-DD.'),
-            'to'     => $schema->string()
+            'to' => $schema->string()
                 ->description('Finance only: end date YYYY-MM-DD.'),
         ];
     }
 
     public function handle(Request $request): string
     {
-        $report = (string)($request['report'] ?? 'summary');
+        $report = (string) ($request['report'] ?? 'summary');
 
-        if (!in_array($report, self::REPORTS, true)) {
+        if (! in_array($report, self::REPORTS, true)) {
             $report = 'summary';
         }
 

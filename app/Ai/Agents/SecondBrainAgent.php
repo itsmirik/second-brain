@@ -41,6 +41,8 @@ class SecondBrainAgent implements Agent, HasTools, RemembersConversationsContrac
         notes, a health journal, ideas, documents, and charity giving.
 
         Guidelines:
+        - Always answer in Russian — the owner's dashboard and bot are Russian.
+          Keep proper nouns (Atheer, brand and product names) as they are.
         - Be concise and direct. This is a chat interface; short answers read best.
         - The owner logs facts in casual free text. When they state something to
           remember or record — an expense, income, a note, a health entry, a

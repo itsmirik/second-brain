@@ -11,13 +11,13 @@ const ownerName = computed(() => page.props.auth.user.name);
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Главная" />
 
-    <AppLayout title="Dashboard">
+    <AppLayout title="Главная">
         <div class="mb-8">
-            <h2 class="text-xl font-semibold">Welcome back, {{ ownerName }}</h2>
+            <h2 class="text-xl font-semibold">С возвращением, {{ ownerName }}</h2>
             <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                Your life, one section at a time.
+                Твоя жизнь — по разделам.
             </p>
         </div>
 
@@ -46,7 +46,7 @@ const ownerName = computed(() => page.props.auth.user.name);
                                 : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-800',
                         ]"
                     >
-                        {{ section.status === 'live' ? 'Live' : 'Soon' }}
+                        {{ section.status === 'live' ? 'Активен' : 'Скоро' }}
                     </span>
                 </div>
                 <h3 class="font-semibold">{{ section.label }}</h3>
