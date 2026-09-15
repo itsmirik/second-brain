@@ -5,14 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A private, **single-owner** "second brain": a Laravel 13 + Inertia/Vue 3 dashboard plus a
-Telegram bot, both driven by one AI agent. The owner logs facts in free-text Russian
+Telegram bot, both driven by one AI agent. The owner logs facts in free-text Russian or Uzbek
 (via Telegram or web chat) and the agent files them into life sections; the dashboard
 shows those entries, live figures from an external ERP (Atheer), period money reports,
 and a charity (sadaqa) obligation calculation.
 
 There is no public registration and no multi-tenancy. The one user is created with
-`php artisan app:create-owner`. UI language is Russian (`APP_LOCALE=ru`); code, comments,
-and commits are English.
+`php artisan app:create-owner`. UI language is Russian (`APP_LOCALE=ru`) — section labels,
+error strings and `format.ts` are hardcoded Russian, not translation keys. The **agent**
+is the exception: its prompt tells it to mirror whatever language the owner wrote in
+(Russian or Uzbek). Code, comments, and commits are English.
 
 ## Commands
 
