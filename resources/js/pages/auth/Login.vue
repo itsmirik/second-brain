@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue';
 import { Head, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 defineProps<{
     canResetPassword?: boolean;
     status?: string;
 }>();
+
+const showPassword = ref(false);
 
 const form = useForm({
     email: '',
@@ -23,7 +26,9 @@ function submit() {
 <template>
     <Head title="Вход" />
 
-    <div class="flex min-h-screen items-center justify-center bg-neutral-50 p-6 dark:bg-neutral-950">
+    <div
+        class="flex min-h-screen items-center justify-center bg-neutral-50 p-6 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100"
+    >
         <div class="w-full max-w-sm">
             <div class="mb-8 flex flex-col items-center gap-3">
                 <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900">
@@ -56,7 +61,7 @@ function submit() {
                         autocomplete="email"
                         autofocus
                         required
-                        class="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                        class="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-100"
                     />
                     <p v-if="form.errors.email" class="mt-1 text-sm text-red-600 dark:text-red-400">
                         {{ form.errors.email }}
@@ -67,14 +72,25 @@ function submit() {
                     <label class="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300" for="password">
                         Пароль
                     </label>
-                    <input
-                        id="password"
-                        v-model="form.password"
-                        type="password"
-                        autocomplete="current-password"
-                        required
-                        class="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
-                    />
+                    <div class="relative">
+                        <input
+                            id="password"
+                            v-model="form.password"
+                            :type="showPassword ? 'text' : 'password'"
+                            autocomplete="current-password"
+                            required
+                            class="w-full rounded-md border border-neutral-300 bg-white py-2 pr-10 pl-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-100"
+                        />
+                        <button
+                            type="button"
+                            :aria-label="showPassword ? 'Скрыть пароль' : 'Показать пароль'"
+                            :aria-pressed="showPassword"
+                            class="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500 transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+                            @click="showPassword = !showPassword"
+                        >
+                            <Icon :name="showPassword ? 'eye-off' : 'eye'" :size="18" />
+                        </button>
+                    </div>
                     <p v-if="form.errors.password" class="mt-1 text-sm text-red-600 dark:text-red-400">
                         {{ form.errors.password }}
                     </p>

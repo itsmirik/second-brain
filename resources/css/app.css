@@ -9,3 +9,26 @@
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
 }
+
+/*
+ * Chrome paints autofilled fields with its own background and text colour,
+ * which reads as black-on-black in the dark theme. Repaint them in the theme's
+ * own colours so a remembered login stays readable.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-neutral-900);
+    -webkit-box-shadow: 0 0 0 1000px var(--color-white) inset;
+    caret-color: var(--color-neutral-900);
+}
+
+@media (prefers-color-scheme: dark) {
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus {
+        -webkit-text-fill-color: var(--color-neutral-100);
+        -webkit-box-shadow: 0 0 0 1000px var(--color-neutral-950) inset;
+        caret-color: var(--color-neutral-100);
+    }
+}
