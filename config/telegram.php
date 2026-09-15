@@ -30,16 +30,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Allowed Chat ID
+    | Allowed Chat IDs
     |--------------------------------------------------------------------------
     |
-    | The single Telegram chat_id permitted to use this bot. It lives in the
-    | environment (not the database) so it can never be changed through the
-    | application itself. Messages from any other chat_id are dropped.
+    | The Telegram chat_ids permitted to use this bot, comma-separated. These
+    | are the owner's own accounts/devices — every one of them speaks to the
+    | same single-owner journal. The list lives in the environment (not the
+    | database) so it can never be changed through the application itself.
+    | Messages from any other chat_id are dropped. An empty list fails closed.
     |
     */
 
-    'allowed_chat_id' => env('TELEGRAM_ALLOWED_CHAT_ID'),
+    'allowed_chat_ids' => array_values(array_filter(
+        array_map(trim(...), explode(',', (string) env('TELEGRAM_ALLOWED_CHAT_IDS', ''))),
+        static fn (string $id): bool => $id !== '',
+    )),
 
     /*
     |--------------------------------------------------------------------------

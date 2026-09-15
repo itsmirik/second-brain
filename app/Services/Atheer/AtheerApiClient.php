@@ -6,26 +6,28 @@ namespace App\Services\Atheer;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
  * Thin read-only client for the Atheer ERP report API. Responses are cached
  * briefly so repeated questions don't hammer the ERP.
  */
-class AtheerApiClient
+readonly class AtheerApiClient
 {
     public function __construct(
-        private readonly string $baseUrl,
-        private readonly ?string $token,
-        private readonly int $cacheTtl,
-    ) {}
+        private string $baseUrl,
+        private ?string $token,
+        private int $cacheTtl,
+    ) {
+    }
 
     public static function fromConfig(): self
     {
         return new self(
             baseUrl: config('atheer.api_url', 'http://127.0.0.1:8000'),
             token: config('atheer.api_token'),
-            cacheTtl: (int) config('atheer.cache_ttl', 900),
+            cacheTtl: (int)config('atheer.cache_ttl', 900),
         );
     }
 
@@ -58,12 +60,12 @@ class AtheerApiClient
     {
         return $this->get('/api/reports/finance', array_filter([
             'from' => $from,
-            'to' => $to,
+            'to'   => $to,
         ]));
     }
 
     /**
-     * @param  array<string, mixed>  $query
+     * @param array<string, mixed> $query
      * @return array<string, mixed>
      */
     private function get(string $path, array $query = []): array
@@ -72,22 +74,29 @@ class AtheerApiClient
             throw new RuntimeException('ATHEER_API_TOKEN is not configured.');
         }
 
-        $cacheKey = 'atheer:'.md5($path.'?'.http_build_query($query));
+        $cacheKey = 'atheer:' . md5($path . '?' . http_build_query($query));
 
         return Cache::remember($cacheKey, $this->cacheTtl, function () use ($path, $query): array {
             $response = Http::withHeaders([
                 'X-Api-Key' => $this->token,
-                'Accept' => 'application/json',
+                'Accept'    => 'application/json',
             ])
                 ->timeout(10)
                 ->retry(2, 200, throw: false)
-                ->get($this->baseUrl.$path, $query);
+                ->get($this->baseUrl . $path, $query);
 
             if ($response->failed()) {
+                Log::error("Atheer API [$path] failed with status {$response->status()}.", [
+                    'query'    => $query,
+                    'response' => $response->json(),
+                    'headers'  => $response->headers(),
+                    'error'    => $response->body(),
+                ]);
+
                 throw new RuntimeException("Atheer API [{$path}] failed with status {$response->status()}.");
             }
 
-            return (array) $response->json();
+            return (array)$response->json();
         });
     }
 }

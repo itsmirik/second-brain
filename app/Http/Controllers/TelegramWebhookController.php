@@ -34,11 +34,12 @@ class TelegramWebhookController extends Controller
             return $this->ack();
         }
 
-        // Single-owner access control. Anything not from the configured chat_id
-        // is dropped silently (no reply) and audited. Because the secret-token
-        // gate already ran, reaching here means the caller knew the secret, so
-        // an audit row is meaningful, not attacker-controllable spam.
-        if (! $update->isFromChat(config('telegram.allowed_chat_id'))) {
+        // Single-owner access control. Anything not from one of the configured
+        // chat_ids is dropped silently (no reply) and audited. Because the
+        // secret-token gate already ran, reaching here means the caller knew
+        // the secret, so an audit row is meaningful, not attacker-controllable
+        // spam.
+        if (! $update->isFromAllowedChat(config('telegram.allowed_chat_ids', []))) {
             $this->log('in', $update->updateId, $update->chatId, 'rejected', 'unauthorized chat_id');
 
             return $this->ack();

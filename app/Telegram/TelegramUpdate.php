@@ -49,13 +49,27 @@ final readonly class TelegramUpdate
         );
     }
 
-    public function isFromChat(int|string|null $allowedChatId): bool
+    /**
+     * Whether this update came from one of the owner's permitted chats.
+     *
+     * Fails closed: an empty allowlist authorises nobody, so a missing
+     * TELEGRAM_ALLOWED_CHAT_IDS can never open the bot to the world.
+     *
+     * @param  list<int|string>  $allowedChatIds
+     */
+    public function isFromAllowedChat(array $allowedChatIds): bool
     {
-        if ($allowedChatId === null || $allowedChatId === '' || $this->chatId === null) {
+        if ($allowedChatIds === [] || $this->chatId === null) {
             return false;
         }
 
-        return (string) $this->chatId === (string) $allowedChatId;
+        foreach ($allowedChatIds as $allowed) {
+            if ((string) $this->chatId === (string) $allowed) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

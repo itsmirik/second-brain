@@ -33,7 +33,7 @@ class ProcessTelegramUpdate implements ShouldQueue
 
         // Defence in depth: re-verify the owner even though the controller
         // already did. A job should never act on an unauthorized chat_id.
-        if (! $update->isFromChat(config('telegram.allowed_chat_id'))) {
+        if (! $update->isFromAllowedChat(config('telegram.allowed_chat_ids', []))) {
             return;
         }
 

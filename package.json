@@ -6,8 +6,6 @@
         "build": "vp build",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
-        "check": "vp check",
-        "check:fix": "vp check --fix",
         "types:check": "vue-tsc --noEmit"
     },
     "dependencies": {
