@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use App\Ai\Support\OwnerResolver;
 use App\Models\Entry;
-use App\Models\User;
 use App\Support\Dashboard\Sections;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -23,6 +22,8 @@ use Throwable;
  */
 final class LogEntryTool implements Tool
 {
+    public function __construct(private readonly OwnerResolver $owner) {}
+
     public function description(): string
     {
         $sections = implode(', ', Sections::entryKeys());
@@ -87,15 +88,15 @@ final class LogEntryTool implements Tool
             return 'Could not log that: the entry text was empty.';
         }
 
-        $user = $this->resolveOwner();
+        $ownerId = $this->owner->id();
 
-        if ($user === null) {
+        if ($ownerId === null) {
             return 'Could not log that: no owner account is configured.';
         }
 
         try {
             $entry = Entry::query()->create([
-                'user_id' => $user->getAuthIdentifier(),
+                'user_id' => $ownerId,
                 'section' => $meta['key'],
                 'body' => $body,
                 'amount' => $meta['money'] ? $this->normalizeAmount($request['amount'] ?? null) : null,
@@ -112,27 +113,6 @@ final class LogEntryTool implements Tool
         $money = $entry->amount !== null ? ' ('.$entry->amount.' so\'m)' : '';
 
         return "Saved to {$meta['label']} on {$when}{$money}. It is now on the dashboard.";
-    }
-
-    private function resolveOwner(): ?User
-    {
-        $user = Auth::user();
-
-        if ($user instanceof User) {
-            return $user;
-        }
-
-        $email = config('dashboard.owner_email');
-
-        if (is_string($email) && $email !== '') {
-            $owner = User::query()->where('email', $email)->first();
-
-            if ($owner !== null) {
-                return $owner;
-            }
-        }
-
-        return User::query()->orderByDesc('id')->first();
     }
 
     private function normalizeAmount(mixed $amount): ?string

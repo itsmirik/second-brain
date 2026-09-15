@@ -45,6 +45,39 @@ class TelegramClient
     }
 
     /**
+     * Replace the text of a message the bot already sent. Used to turn the
+     * "working on it" placeholder into the real answer, so a slow reply costs
+     * the chat one message instead of two.
+     *
+     * @return array<string, mixed>
+     */
+    public function editMessageText(int|string $chatId, int $messageId, string $text): array
+    {
+        return $this->call('editMessageText', [
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+            'text' => $text,
+            'parse_mode' => 'HTML',
+            'disable_web_page_preview' => true,
+        ]);
+    }
+
+    /**
+     * Show Telegram's own "typing..." indicator. It clears itself after a few
+     * seconds, so it complements the placeholder message rather than replacing
+     * it.
+     *
+     * @return array<string, mixed>
+     */
+    public function sendChatAction(int|string $chatId, string $action = 'typing'): array
+    {
+        return $this->call('sendChatAction', [
+            'chat_id' => $chatId,
+            'action' => $action,
+        ]);
+    }
+
+    /**
      * Register the webhook URL with a secret token.
      *
      * @return array<string, mixed>

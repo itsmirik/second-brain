@@ -51,7 +51,8 @@ VerifyTelegramWebhook (X-Telegram-Bot-Api-Secret-Token)
   → TelegramWebhookController  (parse, drop non-owner chat_id, dedupe on update_id
                                 via insertOrIgnore on activity_logs, ack in ms)
     → ProcessTelegramUpdate (queued, tries=3, backoff 5/15/30; re-verifies chat_id)
-      → HandleTelegramMessage (prompt agent, send reply, log 'out' row)
+      → HandleTelegramMessage (placeholder "⏳", prompt agent, edit placeholder
+                              into the reply, log 'out' row)
 ```
 
 `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated) lives in env, never the DB, so it cannot
@@ -64,10 +65,41 @@ Application code never touches a vendor SDK — it prompts this agent. `provider
 an Anthropic → OpenAI → Gemini failover list filtered to providers that actually have a key,
 ordered so `AI_DEFAULT_PROVIDER` goes first; an empty list surfaces a clear error.
 
-Tools live in `app/Ai/Tools/` and are the only way the model can *do* anything:
-- `LogEntryTool` — writes an `Entry`. Its description encodes the sign convention and
-  section routing rules; the system prompt forbids claiming a save without calling it.
-- `AtheerReportsTool` — read-only ERP reports, returns raw JSON for the model to phrase.
+`instructions()` is rebuilt per prompt so it can state **today's date and timezone** — the
+model must never guess a date or ask the owner what day it is.
+
+Tools live in `app/Ai/Tools/` and are the only way the model can *do* anything. Reading
+matters as much as writing: without the read tools the bot answers "I can't look that up,
+check the dashboard", which defeats the product.
+
+- `SearchEntriesTool` — **read**. Filters the journal by sections, a relative period or
+  explicit dates, and free text; returns matching entries (with ids) plus per-section and
+  overall totals, so the model never does arithmetic itself.
+- `MoneyReportTool` — **read**. `MoneyReporter` for a window: per-source income/expense/net
+  across Atheer + money sections, the grand net, and charity given.
+- `CharityStatusTool` — **read**. `CharityService` rows: profit, percentage, obligation,
+  given, remaining, newest month first.
+- `AtheerReportsTool` — **read**. Live ERP reports, raw JSON for the model to phrase.
+- `LogEntryTool` — **write**. Creates an `Entry`. Its description encodes the sign
+  convention and section routing; the prompt forbids claiming a save without calling it.
+- `UpdateEntryTool` — **write**. Corrects a saved entry by id (text, amount, date, tags, or
+  moves it between sections); moving into a non-money section clears the amount.
+
+`App\Ai\Support\OwnerResolver` answers "whose journal is this?" for every tool — the
+logged-in user, else `BRAIN_OWNER_EMAIL`, else the only account. Telegram has no session,
+so tools must never rely on `Auth`. `App\Ai\Support\ToolResponse::json()` is the single
+JSON encoding for tool output (unescaped Cyrillic, preserved zero fractions).
+
+An agent turn takes seconds (model + tools), so `HandleTelegramMessage` posts a `PLACEHOLDER`
+message plus a `typing` chat action first and then **edits that message** into the answer —
+one message in the chat, not two. If the placeholder or the edit fails, the answer is still
+sent as a fresh message; a broken loader must never cost the owner their reply. The web chat
+has its own «Думаю…» bubble in `Chat.vue`.
+
+Conversation memory: the web chat continues the owner's latest conversation, and
+`HandleTelegramMessage` does the same via `continueLastConversation($owner)` — otherwise
+every Telegram message would arrive with no memory and a clarifying question could never
+be answered.
 
 Agent/tool stubs are in `stubs/` (`php artisan make:agent`, `make:tool`).
 
@@ -97,6 +129,9 @@ is computed on profit *before* giving) and lives in its own section.
 
 `App\Support\Reports\Period` turns a period type (day…year) + anchor date into `[from, to]`,
 a Russian label, and prev/next anchors, so neither controllers nor the UI do date maths.
+`App\Support\Reports\Range` is its conversational counterpart: it turns a keyword the agent
+picks (`last_month`, `this_week`, `all`, …) or explicit dates into `[from, to]`, so the model
+never does calendar maths — which it gets wrong.
 
 Charity percentage and manual monthly profit overrides are rows in the generic per-user
 `settings` key/value table (`charity.percentage`, `charity.profit.YYYY-MM`) via
@@ -131,8 +166,10 @@ gitignored and rebuilt on every `npm run build`.
   expect `CarbonImmutable` everywhere.
 - Ownership checks are explicit: entry mutations `abort_unless` the `user_id` matches the
   authenticated user.
-- `tests/` currently holds only the scaffold (`tests/Unit/ExampleTest.php`); Feature tests
-  have no directory yet — create `tests/Feature/` when adding one.
+- Tests live in `tests/Feature/` (Ai tools, Telegram) and `tests/Unit/`; both suites boot the
+  app and use sqlite `:memory:`. Agent tools are testable without a provider: call
+  `handle(new Laravel\Ai\Tools\Request([...]))` directly, and use `SecondBrainAgent::fake([...])`
+  plus `assertPrompted()` when exercising the Telegram/web paths.
 
 ## No formatter / linter
 
