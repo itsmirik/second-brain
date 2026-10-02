@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use App\Ai\Support\HouseLookup;
 use App\Ai\Support\OwnerResolver;
 use App\Models\Entry;
+use App\Models\House;
 use App\Support\Dashboard\Sections;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Facades\Date;
@@ -19,14 +21,22 @@ use Throwable;
  * acknowledge a message — it cannot actually store anything, so "I logged it"
  * would be a lie. Use it whenever the owner states a fact worth keeping: a
  * note, an expense, income, a health observation, a charity donation.
+ *
+ * Home-business entries also go under one of the owner's houses. When the
+ * house is unclear the entry is still saved — the money is never dropped —
+ * and the reply tells the model to ask which house and fix it.
  */
 final class LogEntryTool implements Tool
 {
-    public function __construct(private readonly OwnerResolver $owner) {}
+    public function __construct(
+        private readonly OwnerResolver $owner,
+        private readonly HouseLookup $houses,
+    ) {}
 
     public function description(): string
     {
         $sections = implode(', ', Sections::entryKeys());
+        $houses = $this->houses->describe($this->owner->id());
 
         return <<<TEXT
         Save a note or record into the owner's journal so it appears on the
@@ -38,7 +48,9 @@ final class LogEntryTool implements Tool
         Sections: {$sections}.
         - budget: household money. Use amount, and SIGN it: income is positive,
           an expense is NEGATIVE (e.g. spent 80000 -> amount -80000).
-        - home-business: side-venture money, same signing rule as budget.
+        - home-business: money of the owner's houses, same signing rule as
+          budget. Every entry belongs to one house: pass "house" with its name
+          exactly as listed here. The owner's houses: {$houses}.
         - charity: sadaqa / donations the owner GAVE. Use a positive amount.
         - health: health journal (no amount).
         - family: family matters, relatives, household life (no amount).
@@ -65,6 +77,8 @@ final class LogEntryTool implements Tool
                 ->required(),
             'amount' => $schema->number()
                 ->description('Money amount in so\'m. Only for budget / home-business.'),
+            'house' => $schema->string()
+                ->description('home-business only: the house this is for, by its name as listed.'),
             'occurred_at' => $schema->string()
                 ->description('Date of the event, YYYY-MM-DD. Defaults to today.'),
             'tags' => $schema->array()
@@ -94,10 +108,15 @@ final class LogEntryTool implements Tool
             return 'Could not log that: no owner account is configured.';
         }
 
+        $hasHouses = Sections::hasHouses($meta['key']);
+        $houseName = $this->asName($request['house'] ?? null);
+        $house = $hasHouses ? $this->house($ownerId, $houseName) : null;
+
         try {
             $entry = Entry::query()->create([
                 'user_id' => $ownerId,
                 'section' => $meta['key'],
+                'house_id' => $house?->id,
                 'body' => $body,
                 'amount' => $meta['money'] ? $this->normalizeAmount($request['amount'] ?? null) : null,
                 'occurred_at' => $this->normalizeDate($request['occurred_at'] ?? null),
@@ -109,10 +128,52 @@ final class LogEntryTool implements Tool
             return 'Could not save that entry right now. Please try again shortly.';
         }
 
+        $where = $house === null ? $meta['label'] : $meta['label'].' · «'.$house->name.'»';
         $when = $entry->occurred_at->toDateString();
         $money = $entry->amount !== null ? ' ('.$entry->amount.' so\'m)' : '';
+        $saved = "Saved to {$where} on {$when}{$money}. It is now on the dashboard.";
 
-        return "Saved to {$meta['label']} on {$when}{$money}. It is now on the dashboard.";
+        if (! $hasHouses || $house !== null) {
+            return $saved;
+        }
+
+        return $saved.$this->missingHouse($ownerId, $entry, $houseName);
+    }
+
+    /**
+     * The house the model named, or the owner's only house when it named
+     * none. Null when that leaves it unclear.
+     */
+    private function house(int $ownerId, ?string $name): ?House
+    {
+        return $name === null
+            ? $this->houses->only($ownerId)
+            : $this->houses->find($ownerId, $name);
+    }
+
+    /**
+     * What the model must do about an entry that was saved without a house.
+     * Nothing, if the owner keeps no houses and none was named.
+     */
+    private function missingHouse(int $ownerId, Entry $entry, ?string $name): string
+    {
+        if ($name === null && $this->houses->all($ownerId)->isEmpty()) {
+            return '';
+        }
+
+        $reason = $name === null
+            ? 'No house was given'
+            : 'No single house matches "'.$name.'"';
+
+        return " {$reason}, so it is filed under no house for now. The owner's houses: "
+            .$this->houses->describe($ownerId).'. Ask the owner which house it belongs to, then set'
+            ." it with the update tool on entry #{$entry->id}. If it is a new house they started,"
+            .' add the house first.';
+    }
+
+    private function asName(mixed $name): ?string
+    {
+        return is_string($name) && trim($name) !== '' ? trim($name) : null;
     }
 
     private function normalizeAmount(mixed $amount): ?string

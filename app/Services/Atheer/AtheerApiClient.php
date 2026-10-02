@@ -65,6 +65,23 @@ readonly class AtheerApiClient
     }
 
     /**
+     * What the inbound Instagram DMs are asking for: top products by how many
+     * leads mentioned them, terms the catalogue does not answer, and the ads
+     * those leads arrived from.
+     *
+     * @return array<string, mixed>
+     */
+    public function leadDemand(?string $from = null, ?string $to = null, ?string $source = null, ?int $limit = null): array
+    {
+        return $this->get('/api/reports/lead-demand', array_filter([
+            'from'   => $from,
+            'to'     => $to,
+            'source' => $source,
+            'limit'  => $limit,
+        ]));
+    }
+
+    /**
      * @param array<string, mixed> $query
      * @return array<string, mixed>
      */

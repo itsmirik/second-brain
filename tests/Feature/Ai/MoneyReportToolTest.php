@@ -63,6 +63,22 @@ class MoneyReportToolTest extends TestCase
         $this->assertSame(-200000.0, $sources['budget']['net']);
     }
 
+    public function test_the_last_day_of_the_month_counts(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'boom'], 500)]);
+
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'budget',
+            'body' => 'Зарплата',
+            'amount' => '500000',
+            'occurred_at' => '2026-09-30',
+        ]);
+
+        $result = $this->report(['period' => 'this_month']);
+
+        $this->assertSame(500000.0, $result['net']);
+    }
+
     public function test_it_still_reports_when_atheer_is_down(): void
     {
         Http::fake(['*' => Http::response(['message' => 'boom'], 500)]);

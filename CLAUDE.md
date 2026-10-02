@@ -72,18 +72,35 @@ Tools live in `app/Ai/Tools/` and are the only way the model can *do* anything. 
 matters as much as writing: without the read tools the bot answers "I can't look that up,
 check the dashboard", which defeats the product.
 
-- `SearchEntriesTool` — **read**. Filters the journal by sections, a relative period or
-  explicit dates, and free text; returns matching entries (with ids) plus per-section and
-  overall totals, so the model never does arithmetic itself.
+- `SearchEntriesTool` — **read**. Filters the journal by sections, a house, a relative
+  period or explicit dates, and free text; returns matching entries (with ids and house)
+  plus per-section, per-house and overall totals, so the model never does arithmetic itself.
 - `MoneyReportTool` — **read**. `MoneyReporter` for a window: per-source income/expense/net
   across Atheer + money sections, the grand net, and charity given.
 - `CharityStatusTool` — **read**. `CharityService` rows: profit, percentage, obligation,
   given, remaining, newest month first.
-- `AtheerReportsTool` — **read**. Live ERP reports, raw JSON for the model to phrase.
+- `AtheerReportsTool` — **read**. Live ERP reports, raw JSON for the model to phrase:
+  summary, funnel, deliveries, reconciliation, finance, and `lead-demand` — which products
+  the Instagram DMs are asking for, ranked by how many separate leads mentioned them, with
+  the terms the catalogue does not cover. The demand aggregation itself lives in Atheer
+  (`App\Support\Leads\ProductDemand` + `DemandText`, `GET /api/reports/lead-demand`); it
+  transliterates and phonetically folds the text, so Sauvage / savaj / Саваж / savash are
+  counted as one product. This side only calls it — do not re-group the numbers here.
 - `LogEntryTool` — **write**. Creates an `Entry`. Its description encodes the sign
   convention and section routing; the prompt forbids claiming a save without calling it.
-- `UpdateEntryTool` — **write**. Corrects a saved entry by id (text, amount, date, tags, or
-  moves it between sections); moving into a non-money section clears the amount.
+  A home-business entry goes under the house the model names (or the only house). When
+  that is unclear it is still saved, under no house, and the reply tells the model to ask
+  which house and fix it — the money is never dropped.
+- `UpdateEntryTool` — **write**. Corrects a saved entry by id (text, amount, date, tags,
+  house, or moves it between sections); moving into a non-money section clears the amount,
+  and moving out of a section split by house clears the house.
+- `CreateHouseTool` — **write**. Adds a house when the owner says they started one. The
+  description forbids creating a house just because a name did not match.
+
+House names reach the tools as the owner says them; `App\Ai\Support\HouseLookup` matches
+an exact name ignoring case, then the one house whose name contains it, else nothing — a
+wrong guess would misfile real money. The tool descriptions list the owner's houses, so
+they read the database.
 
 `App\Ai\Support\OwnerResolver` answers "whose journal is this?" for every tool — the
 logged-in user, else `BRAIN_OWNER_EMAIL`, else the only account. Telegram has no session,
@@ -115,6 +132,15 @@ globally so the sidebar renders everywhere. Adding a live entries section = add 
 entry; no controller changes. `charity` is the exception: it is entries-backed but has its
 own `CharityController` (monthly obligation maths) and is skipped in that loop.
 
+A section with `'houses' => true` (today only `home-business`) splits its entries by the
+owner's houses: `houses` table, nullable `entries.house_id`. The page gets a house switcher
+(`?house=<id>` one house, `?house=none` entries under no house, no parameter all of them),
+per-house totals, and `{section}/houses` routes (`HouseController`) to add, rename and
+delete. Names are unique per owner ignoring case — checked in PHP (`House::named()`),
+because SQLite's `lower()` does not fold Cyrillic. Deleting a house never deletes money: its
+entries stay in the section under no house. Houses do not change `MoneyReporter` — the
+section still nets as one source.
+
 ### Money
 
 Sign convention, applied everywhere: **income positive, expense negative**. The web form
@@ -126,6 +152,10 @@ the money sections (`budget`, `home-business`) — into per-source income/expens
 grand net. `Reports` uses it directly; `CharityService` uses its `profit()` as the base for
 `profit × percentage`. Charity giving is deliberately **not** in the profit base (obligation
 is computed on profit *before* giving) and lives in its own section.
+
+`App\Support\Money\EntryTotals` sums count / income / expense / net in SQL, overall or per
+column (section, house). Section pages and the search tool use it; never total a page of
+loaded rows, which silently drops everything past the page.
 
 `App\Support\Reports\Period` turns a period type (day…year) + anchor date into `[from, to]`,
 a Russian label, and prev/next anchors, so neither controllers nor the UI do date maths.
@@ -163,7 +193,9 @@ gitignored and rebuilt on every `npm run build`.
 - Typed properties, constructor promotion, `readonly` on service/DTO dependencies;
   services are bound as singletons via `fromConfig()` factories in `AppServiceProvider`.
 - Dates: `Date::use(CarbonImmutable::class)` is set globally — use the `Date` facade, and
-  expect `CarbonImmutable` everywhere.
+  expect `CarbonImmutable` everywhere. `entries.occurred_at` is stored as a plain `Y-m-d`
+  (`Entry::occurredAt()`): with a time attached, SQLite compares it as text and every
+  `whereBetween` range silently loses its last day.
 - Ownership checks are explicit: entry mutations `abort_unless` the `user_id` matches the
   authenticated user.
 - Tests live in `tests/Feature/` (Ai tools, Telegram) and `tests/Unit/`; both suites boot the

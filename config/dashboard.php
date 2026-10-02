@@ -14,6 +14,9 @@ declare(strict_types=1);
 |             generic log backed by the entries table (SectionController).
 |   money   — whether this section emphasises the amount field (totals).
 |   status  — "live" sections have a route + UI; "planned" render nothing yet.
+|   houses  — optional, default false. The section's entries are split by the
+|             owner's houses (the houses table): the page gets a house
+|             switcher, and the agent files entries under a house.
 |
 */
 
@@ -53,6 +56,7 @@ return [
             'driver' => 'entries',
             'money' => true,
             'status' => 'live',
+            'houses' => true,
         ],
         [
             'key' => 'health',

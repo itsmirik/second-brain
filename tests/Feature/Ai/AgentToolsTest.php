@@ -7,10 +7,12 @@ namespace Tests\Feature\Ai;
 use App\Ai\Agents\SecondBrainAgent;
 use App\Ai\Tools\AtheerReportsTool;
 use App\Ai\Tools\CharityStatusTool;
+use App\Ai\Tools\CreateHouseTool;
 use App\Ai\Tools\LogEntryTool;
 use App\Ai\Tools\MoneyReportTool;
 use App\Ai\Tools\SearchEntriesTool;
 use App\Ai\Tools\UpdateEntryTool;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\ObjectSchema;
@@ -18,6 +20,9 @@ use Tests\TestCase;
 
 class AgentToolsTest extends TestCase
 {
+    // Tool descriptions list the owner's houses, so they read the database.
+    use RefreshDatabase;
+
     public function test_the_brain_can_read_write_and_correct(): void
     {
         // Arrange + Act
@@ -34,6 +39,7 @@ class AgentToolsTest extends TestCase
             CharityStatusTool::class,
             LogEntryTool::class,
             UpdateEntryTool::class,
+            CreateHouseTool::class,
         ], $tools);
     }
 

@@ -31,6 +31,7 @@ const paths: Record<string, string[]> = {
     chart: ['M4 20V4', 'M4 20h16', 'M8 16v-4', 'M13 16V8', 'M18 16v-6'],
     left: ['M15 6l-6 6 6 6'],
     right: ['M9 6l6 6-6 6'],
+    plus: ['M12 5v14', 'M5 12h14'],
     trash: ['M4 7h16', 'M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2', 'M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13'],
     pencil: ['M4 20h4L18.5 9.5a2 2 0 0 0-2.83-2.83L5 17.5V20z', 'M13.5 7.5l3 3'],
     eye: [

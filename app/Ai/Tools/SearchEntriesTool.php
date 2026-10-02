@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use App\Ai\Support\HouseLookup;
 use App\Ai\Support\OwnerResolver;
 use App\Ai\Support\ToolResponse;
 use App\Models\Entry;
 use App\Support\Dashboard\Sections;
+use App\Support\Money\EntryTotals;
 use App\Support\Reports\Range;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,10 +21,13 @@ use Laravel\Ai\Tools\Request;
  * The read side of the journal. Without it the brain can only write and would
  * have to tell the owner "I cannot look that up" — which is the one thing a
  * second brain must never say. Answers "how much sadaqa did I give last
- * month?", "what did I note about the supplier?", "show my health entries".
+ * month?", "what did I note about the supplier?", "show my health entries",
+ * "how much has the Chilanzar house cost so far?".
  *
  * Returns both the matching entries (with their ids, so they can be edited)
  * and pre-computed totals, so the model never has to add numbers itself.
+ *
+ * @phpstan-import-type Totals from EntryTotals
  */
 final class SearchEntriesTool implements Tool
 {
@@ -33,29 +38,36 @@ final class SearchEntriesTool implements Tool
     /** Entries are short; this only guards against a pasted wall of text. */
     private const BODY_LIMIT = 400;
 
-    public function __construct(private readonly OwnerResolver $owner) {}
+    public function __construct(
+        private readonly OwnerResolver $owner,
+        private readonly HouseLookup $houses,
+    ) {}
 
     public function description(): string
     {
         $sections = implode(', ', Sections::entryKeys());
         $periods = implode(', ', Range::KEYWORDS);
+        $houses = $this->houses->describe($this->owner->id());
 
         return <<<TEXT
         Look up what the owner has already logged. Use this for ANY question
         about the past — "how much did I give to charity last month", "what did
         I write about the supplier", "show my health notes", "how much did I
-        spend on food" — before saying you do not know something.
+        spend on food", "how much has this house cost" — before saying you do
+        not know something.
 
         Sections: {$sections}. Omit to search all of them.
         Periods: {$periods}. Defaults to this_month; pass "all" when the owner
         does not name a time frame and you want their whole history. You may
         instead pass explicit from/to dates (YYYY-MM-DD), which win over period.
+        House: narrows to one home-business house, by its name as listed. The
+        owner's houses: {$houses}. A house's total cost so far is period "all".
 
         Returns the matching entries newest first (each with its id, date,
-        amount and text), plus ready-made totals per section and overall.
-        Amounts are signed: income positive, expense negative; "expense" in the
-        totals is already the absolute value of what went out. Use the returned
-        ids when the owner asks to correct or move an entry.
+        amount, house and text), plus ready-made totals per section, per house
+        and overall. Amounts are signed: income positive, expense negative;
+        "expense" in the totals is already the absolute value of what went out.
+        Use the returned ids when the owner asks to correct or move an entry.
         TEXT;
     }
 
@@ -68,6 +80,7 @@ final class SearchEntriesTool implements Tool
             'sections' => $schema->array()
                 ->items($schema->string()->enum(Sections::entryKeys()))
                 ->description('Sections to search. Omit for all of them.'),
+            'house' => $schema->string()->description('Only this home-business house, by its name as listed.'),
             'period' => $schema->string()
                 ->description('Relative time window.')
                 ->enum(Range::KEYWORDS),
@@ -92,6 +105,16 @@ final class SearchEntriesTool implements Tool
             return $sections;
         }
 
+        $houseName = $this->asString($request['house'] ?? null);
+        $house = $houseName === null ? null : $this->houses->find($ownerId, $houseName);
+
+        if ($houseName !== null && $house === null) {
+            return 'Could not search: no single house matches "'.$houseName.'". The owner\'s houses: '
+                .$this->houses->describe($ownerId).'.';
+        }
+
+        $houseId = $house?->id;
+
         $range = Range::resolve(
             $this->asString($request['period'] ?? null),
             $this->asString($request['from'] ?? null),
@@ -104,10 +127,13 @@ final class SearchEntriesTool implements Tool
             ->forUser($ownerId)
             ->occurredBetween($range->from, $range->to)
             ->when($sections !== [], fn (Builder $builder) => $builder->whereIn('section', $sections))
+            ->when($houseId !== null, fn (Builder $builder) => $builder->forHouse($houseId))
             ->when($query !== '', fn (Builder $builder) => $builder->where('body', 'like', '%'.$query.'%'));
 
         $bySection = $this->statistics($base);
+        $byHouse = $this->houseStatistics($base, $ownerId);
         $entries = (clone $base)
+            ->with('house:id,name')
             ->orderByDesc('occurred_at')
             ->orderByDesc('id')
             ->limit($this->normalizeLimit($request['limit'] ?? null))
@@ -116,6 +142,7 @@ final class SearchEntriesTool implements Tool
         return ToolResponse::json([
             'range' => $range->toArray(),
             'sections' => $sections === [] ? Sections::entryKeys() : $sections,
+            'house' => $house?->name,
             'query' => $query === '' ? null : $query,
             'matched' => array_sum(array_column($bySection, 'entries')),
             'returned' => $entries->count(),
@@ -125,6 +152,7 @@ final class SearchEntriesTool implements Tool
                 'expense' => round((float) array_sum(array_column($bySection, 'expense')), 2),
             ],
             'by_section' => $bySection,
+            ...($byHouse === [] ? [] : ['by_house' => $byHouse]),
             'entries' => $entries->map($this->present(...))->all(),
         ]);
     }
@@ -138,35 +166,64 @@ final class SearchEntriesTool implements Tool
      */
     private function statistics(Builder $base): array
     {
-        $rows = (clone $base)
-            ->toBase()
-            ->selectRaw('section, count(*) as entries')
-            ->selectRaw('coalesce(sum(amount), 0) as total')
-            ->selectRaw('coalesce(sum(case when amount > 0 then amount else 0 end), 0) as income')
-            ->selectRaw('coalesce(sum(case when amount < 0 then -amount else 0 end), 0) as expense')
-            ->groupBy('section')
-            ->orderBy('section')
-            ->get();
-
         $stats = [];
 
-        foreach ($rows as $row) {
-            /** @var array<string, mixed> $data */
-            $data = (array) $row;
-            $key = (string) ($data['section'] ?? '');
-            $meta = Sections::find($key);
+        foreach (EntryTotals::groupedBy($base, 'section') as $group) {
+            $key = (string) $group['key'];
 
             $stats[] = [
                 'section' => $key,
-                'label' => $meta['label'] ?? $key,
-                'entries' => (int) ($data['entries'] ?? 0),
-                'sum' => round((float) ($data['total'] ?? 0), 2),
-                'income' => round((float) ($data['income'] ?? 0), 2),
-                'expense' => round((float) ($data['expense'] ?? 0), 2),
+                'label' => Sections::find($key)['label'] ?? $key,
+                ...$this->money($group['totals']),
             ];
         }
 
         return $stats;
+    }
+
+    /**
+     * The same totals per house, over the matched entries of sections split by
+     * house — "how much has each house cost" in one call. A null house is the
+     * entries filed under none. Empty when no such entries matched.
+     *
+     * @param  Builder<Entry>  $base
+     * @return list<array{house:string|null,entries:int,sum:float,income:float,expense:float}>
+     */
+    private function houseStatistics(Builder $base, int $ownerId): array
+    {
+        $houseSections = Sections::houseKeys();
+
+        if ($houseSections === []) {
+            return [];
+        }
+
+        $names = $this->houses->all($ownerId)->pluck('name', 'id');
+        $stats = [];
+
+        foreach (EntryTotals::groupedBy((clone $base)->whereIn('section', $houseSections), 'house_id') as $group) {
+            $stats[] = [
+                'house' => $group['key'] === null ? null : $names->get((int) $group['key']),
+                ...$this->money($group['totals']),
+            ];
+        }
+
+        return $stats;
+    }
+
+    /**
+     * The tool has always called the net "sum"; keep that name for the model.
+     *
+     * @param  Totals  $totals
+     * @return array{entries:int,sum:float,income:float,expense:float}
+     */
+    private function money(array $totals): array
+    {
+        return [
+            'entries' => $totals['entries'],
+            'sum' => $totals['net'],
+            'income' => $totals['income'],
+            'expense' => $totals['expense'],
+        ];
     }
 
     /**
@@ -209,7 +266,7 @@ final class SearchEntriesTool implements Tool
     }
 
     /**
-     * @return array{id:int,section:string,date:string,amount:float|null,body:string,tags:list<string>}
+     * @return array{id:int,section:string,house:string|null,date:string,amount:float|null,body:string,tags:list<string>}
      */
     private function present(Entry $entry): array
     {
@@ -219,6 +276,7 @@ final class SearchEntriesTool implements Tool
         return [
             'id' => $entry->id,
             'section' => $entry->section,
+            'house' => $entry->house?->name,
             'date' => $entry->occurred_at->toDateString(),
             'amount' => $entry->amount !== null ? (float) $entry->amount : null,
             'body' => Str::limit($entry->body, self::BODY_LIMIT),

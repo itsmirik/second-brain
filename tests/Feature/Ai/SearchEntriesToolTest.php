@@ -6,6 +6,7 @@ namespace Tests\Feature\Ai;
 
 use App\Ai\Tools\SearchEntriesTool;
 use App\Models\Entry;
+use App\Models\House;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -93,6 +94,26 @@ class SearchEntriesToolTest extends TestCase
         $this->assertSame(1, $bySection['health']['entries']);
     }
 
+    public function test_entries_on_the_last_day_of_the_range_are_included(): void
+    {
+        // Arrange — "today" is the last day of both windows below.
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'budget',
+            'body' => 'Обед',
+            'amount' => '-60000',
+            'occurred_at' => '2026-09-15',
+        ]);
+
+        // Act
+        $today = $this->search(['period' => 'today']);
+        $all = $this->search(['period' => 'all']);
+
+        // Assert
+        $this->assertSame(1, $today['matched']);
+        $this->assertSame(1, $all['matched']);
+        $this->assertSame(-60000.0, $all['totals']['sum']);
+    }
+
     public function test_it_filters_by_free_text(): void
     {
         Entry::factory()->for($this->owner)->create([
@@ -129,10 +150,78 @@ class SearchEntriesToolTest extends TestCase
         $this->assertSame([], $result['entries']);
     }
 
+    public function test_it_narrows_to_one_house_and_totals_every_house(): void
+    {
+        // Arrange
+        $chilanzar = House::factory()->for($this->owner)->create(['name' => 'Чиланзар']);
+        $sergeli = House::factory()->for($this->owner)->create(['name' => 'Сергели']);
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'home-business',
+            'house_id' => $chilanzar->id,
+            'body' => 'Кирпич',
+            'amount' => '-3000000',
+            'occurred_at' => '2026-09-05',
+        ]);
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'home-business',
+            'house_id' => $sergeli->id,
+            'body' => 'Цемент',
+            'amount' => '-1000000',
+            'occurred_at' => '2026-09-06',
+        ]);
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'home-business',
+            'body' => 'Инструменты',
+            'amount' => '-500000',
+            'occurred_at' => '2026-09-07',
+        ]);
+
+        // Act
+        $one = $this->search(['house' => 'чиланзар', 'period' => 'this_month']);
+        $all = $this->search(['sections' => ['home-business'], 'period' => 'this_month']);
+
+        // Assert
+        $this->assertSame('Чиланзар', $one['house']);
+        $this->assertSame(1, $one['matched']);
+        $this->assertSame('Кирпич', $one['entries'][0]['body']);
+        $this->assertSame('Чиланзар', $one['entries'][0]['house']);
+        $this->assertSame(-3000000.0, $one['totals']['sum']);
+
+        $byHouse = collect($all['by_house'])->keyBy(fn (array $row): string => $row['house'] ?? 'none');
+        $this->assertSame(-3000000.0, $byHouse['Чиланзар']['sum']);
+        $this->assertSame(-1000000.0, $byHouse['Сергели']['sum']);
+        $this->assertSame(-500000.0, $byHouse['none']['sum']);
+        $this->assertSame(1, $byHouse['none']['entries']);
+    }
+
+    public function test_an_unknown_house_is_reported_with_the_known_ones(): void
+    {
+        House::factory()->for($this->owner)->create(['name' => 'Чиланзар']);
+
+        $raw = (string) app(SearchEntriesTool::class)->handle(new Request(['house' => 'Юнусабад']));
+
+        $this->assertStringContainsString('Юнусабад', $raw);
+        $this->assertStringContainsString('«Чиланзар»', $raw);
+    }
+
+    public function test_results_without_houses_carry_no_house_breakdown(): void
+    {
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'budget',
+            'body' => 'Продукты',
+            'amount' => '-80000',
+            'occurred_at' => '2026-09-05',
+        ]);
+
+        $result = $this->search(['period' => 'this_month']);
+
+        $this->assertArrayNotHasKey('by_house', $result);
+        $this->assertNull($result['entries'][0]['house']);
+    }
+
     public function test_it_rejects_an_unknown_section(): void
     {
-        $raw = (new SearchEntriesTool(app(\App\Ai\Support\OwnerResolver::class)))
-            ->handle(new Request(['sections' => ['crypto']]));
+        $raw = (string) app(SearchEntriesTool::class)->handle(new Request(['sections' => ['crypto']]));
 
         $this->assertStringContainsString('crypto', $raw);
     }
