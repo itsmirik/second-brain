@@ -79,7 +79,13 @@ check the dashboard", which defeats the product.
   across Atheer + money sections, the grand net, and charity given.
 - `CharityStatusTool` — **read**. `CharityService` rows: profit, percentage, obligation,
   given, remaining, newest month first.
-- `AtheerReportsTool` — **read**. Live ERP reports, raw JSON for the model to phrase.
+- `AtheerReportsTool` — **read**. Live ERP reports, raw JSON for the model to phrase:
+  summary, funnel, deliveries, reconciliation, finance, and `lead-demand` — which products
+  the Instagram DMs are asking for, ranked by how many separate leads mentioned them, with
+  the terms the catalogue does not cover. The demand aggregation itself lives in Atheer
+  (`App\Support\Leads\ProductDemand` + `DemandText`, `GET /api/reports/lead-demand`); it
+  transliterates and phonetically folds the text, so Sauvage / savaj / Саваж / savash are
+  counted as one product. This side only calls it — do not re-group the numbers here.
 - `LogEntryTool` — **write**. Creates an `Entry`. Its description encodes the sign
   convention and section routing; the prompt forbids claiming a save without calling it.
 - `UpdateEntryTool` — **write**. Corrects a saved entry by id (text, amount, date, tags, or

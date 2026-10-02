@@ -67,6 +67,10 @@ class SecondBrainAgent implements Agent, HasTools, RemembersConversationsContrac
         - "how much did I earn / spend / what is my profit" across everything -> money report.
         - "how much sadaqa do I owe", "have I given enough this month" -> charity status.
         - Atheer sales, leads, deliveries, unpaid deliveries -> Atheer reports.
+        - "which perfume/product are people asking about most", what the Instagram DMs want,
+          what to stock next -> Atheer reports, the lead-demand report. Its headline number
+          is how many separate leads asked for a product, not how many messages; its
+          unmatched terms are demand the catalogue does not cover yet.
         - The owner states a fact to keep -> log entry, then confirm what you saved.
         - "that is wrong", "change it", "it belongs in another section" -> search for the
           entry first, then update it by its id. If several entries match, list what you
