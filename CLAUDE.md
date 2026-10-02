@@ -169,7 +169,9 @@ gitignored and rebuilt on every `npm run build`.
 - Typed properties, constructor promotion, `readonly` on service/DTO dependencies;
   services are bound as singletons via `fromConfig()` factories in `AppServiceProvider`.
 - Dates: `Date::use(CarbonImmutable::class)` is set globally — use the `Date` facade, and
-  expect `CarbonImmutable` everywhere.
+  expect `CarbonImmutable` everywhere. `entries.occurred_at` is stored as a plain `Y-m-d`
+  (`Entry::occurredAt()`): with a time attached, SQLite compares it as text and every
+  `whereBetween` range silently loses its last day.
 - Ownership checks are explicit: entry mutations `abort_unless` the `user_id` matches the
   authenticated user.
 - Tests live in `tests/Feature/` (Ai tools, Telegram) and `tests/Unit/`; both suites boot the

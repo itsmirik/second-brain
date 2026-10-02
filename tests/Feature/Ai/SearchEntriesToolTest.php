@@ -93,6 +93,26 @@ class SearchEntriesToolTest extends TestCase
         $this->assertSame(1, $bySection['health']['entries']);
     }
 
+    public function test_entries_on_the_last_day_of_the_range_are_included(): void
+    {
+        // Arrange — "today" is the last day of both windows below.
+        Entry::factory()->for($this->owner)->create([
+            'section' => 'budget',
+            'body' => 'Обед',
+            'amount' => '-60000',
+            'occurred_at' => '2026-09-15',
+        ]);
+
+        // Act
+        $today = $this->search(['period' => 'today']);
+        $all = $this->search(['period' => 'all']);
+
+        // Assert
+        $this->assertSame(1, $today['matched']);
+        $this->assertSame(1, $all['matched']);
+        $this->assertSame(-60000.0, $all['totals']['sum']);
+    }
+
     public function test_it_filters_by_free_text(): void
     {
         Entry::factory()->for($this->owner)->create([

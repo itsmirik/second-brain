@@ -6,10 +6,12 @@ namespace App\Models;
 
 use Database\Factories\EntryFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 /**
  * A log entry in a life section (see config/dashboard.php). Generic by design —
@@ -44,6 +46,20 @@ class Entry extends Model
             'amount' => 'decimal:2',
             'tags' => 'array',
         ];
+    }
+
+    /**
+     * Stored as a plain date. The "date" cast alone writes "Y-m-d 00:00:00",
+     * which SQLite keeps as text, so a range ending on that day compared
+     * "2026-10-02 00:00:00" with "2026-10-02" and silently lost its last day.
+     *
+     * @return Attribute<never, string>
+     */
+    protected function occurredAt(): Attribute
+    {
+        return Attribute::make(
+            set: static fn (mixed $value): string => Date::parse($value)->toDateString(),
+        );
     }
 
     /** @return BelongsTo<User, $this> */
