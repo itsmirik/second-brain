@@ -7,7 +7,7 @@ namespace App\Support\Dashboard;
 /**
  * Thin accessor over the config('dashboard.sections') list.
  *
- * @phpstan-type SectionConfig array{key:string,label:string,description:string,icon:string,driver:string,money:bool,status:string}
+ * @phpstan-type SectionConfig array{key:string,label:string,description:string,icon:string,driver:string,money:bool,status:string,houses?:bool}
  */
 final class Sections
 {
@@ -44,6 +44,24 @@ final class Sections
         }
 
         return $section;
+    }
+
+    /**
+     * Whether a live, entries-backed section splits its entries by house.
+     */
+    public static function hasHouses(string $key): bool
+    {
+        return (self::entrySection($key)['houses'] ?? false) === true;
+    }
+
+    /**
+     * Keys of the live, entries-backed sections that split entries by house.
+     *
+     * @return list<string>
+     */
+    public static function houseKeys(): array
+    {
+        return array_values(array_filter(self::entryKeys(), self::hasHouses(...)));
     }
 
     /**

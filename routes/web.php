@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\Sections\AtheerController;
 use App\Http\Controllers\Sections\CharityController;
+use App\Http\Controllers\Sections\HouseController;
 use App\Http\Controllers\Sections\SectionController;
 use App\Support\Dashboard\Sections;
 use Illuminate\Support\Facades\Route;
@@ -52,6 +53,23 @@ Route::middleware('auth')->group(function (): void {
         Route::post("{$sectionKey}/entries", [SectionController::class, 'storeEntry'])
             ->defaults('section', $sectionKey)
             ->name("sections.{$sectionKey}.entries.store");
+
+        if (! Sections::hasHouses($sectionKey)) {
+            continue;
+        }
+
+        // The owner's houses, managed from the section they split.
+        Route::post("{$sectionKey}/houses", [HouseController::class, 'store'])
+            ->defaults('section', $sectionKey)
+            ->name("sections.{$sectionKey}.houses.store");
+
+        Route::put("{$sectionKey}/houses/{house}", [HouseController::class, 'update'])
+            ->defaults('section', $sectionKey)
+            ->name("sections.{$sectionKey}.houses.update");
+
+        Route::delete("{$sectionKey}/houses/{house}", [HouseController::class, 'destroy'])
+            ->defaults('section', $sectionKey)
+            ->name("sections.{$sectionKey}.houses.destroy");
     }
 
     // Edit / move / delete any entry (the owner's fix for a mis-filed bot entry).

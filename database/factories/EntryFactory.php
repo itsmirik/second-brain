@@ -25,6 +25,7 @@ class EntryFactory extends Factory
         return [
             'user_id' => User::factory(),
             'section' => 'personal',
+            'house_id' => null,
             'body' => fake()->sentence(),
             'amount' => null,
             'occurred_at' => Date::today()->toDateString(),

@@ -6,6 +6,7 @@ namespace App\Ai\Agents;
 
 use App\Ai\Tools\AtheerReportsTool;
 use App\Ai\Tools\CharityStatusTool;
+use App\Ai\Tools\CreateHouseTool;
 use App\Ai\Tools\LogEntryTool;
 use App\Ai\Tools\MoneyReportTool;
 use App\Ai\Tools\SearchEntriesTool;
@@ -72,6 +73,13 @@ class SecondBrainAgent implements Agent, HasTools, RemembersConversationsContrac
           is how many separate leads asked for a product, not how many messages; its
           unmatched terms are demand the catalogue does not cover yet.
         - The owner states a fact to keep -> log entry, then confirm what you saved.
+        - Home-business money belongs to one of the owner's houses — each house they build or
+          run is its own project. Log it with its house. If they did not say which house and
+          there are several, save it anyway, then ask which one and set it.
+        - "I started / bought a new house" -> add the house, then log against it. Never add a
+          house just because a name did not match; ask which one they meant.
+        - "how much has house X cost / brought in" -> search the journal for that house, with
+          period "all" for the whole project so far.
         - "that is wrong", "change it", "it belongs in another section" -> search for the
           entry first, then update it by its id. If several entries match, list what you
           found and ask which one.
@@ -124,6 +132,7 @@ class SecondBrainAgent implements Agent, HasTools, RemembersConversationsContrac
             app(CharityStatusTool::class),
             app(LogEntryTool::class),
             app(UpdateEntryTool::class),
+            app(CreateHouseTool::class),
         ];
     }
 

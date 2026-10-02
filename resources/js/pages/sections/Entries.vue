@@ -1,16 +1,22 @@
 <script setup lang="ts">
+import HouseSwitcher from '@/components/HouseSwitcher.vue';
+import HouseTotals from '@/components/HouseTotals.vue';
 import Icon from '@/components/Icon.vue';
 import StatCard from '@/components/StatCard.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { money, shortDate } from '@/lib/format';
-import type { Entry, Section } from '@/types';
+import type { Entry, HouseFilter, HouseSummary, MoneyTotals, Section } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
     section: Section;
     entries: Entry[];
-    total: number | null;
+    totals: MoneyTotals | null;
+    // Only for a section split by house (home business); null elsewhere.
+    houses: HouseSummary[] | null;
+    unassigned: MoneyTotals | null;
+    house: HouseFilter;
 }>();
 
 const page = usePage();
@@ -22,6 +28,53 @@ const moveTargets = computed(() =>
     ),
 );
 
+// ---- Houses ----
+const houseNames = computed(
+    () => new Map((props.houses ?? []).map((h) => [h.id, h.name])),
+);
+
+// The open house, when one specific house is shown.
+const openHouse = computed(() => (typeof props.house === 'number' ? props.house : null));
+
+// Several houses are listed together, so each entry shows its house.
+const showsHouseOfEntry = computed(() => !!props.houses?.length && props.house === null);
+
+// A new entry goes where the owner is looking: the open house, or no house in
+// the "Без дома" view. Only the all-houses view asks which house.
+const picksHouse = computed(() => !!props.houses?.length && props.house === null);
+
+// The picker starts on the only house when there is just one (as the bot
+// does), otherwise on "no house" — nothing gets filed by a guess.
+function defaultHouse(): number | null {
+    return props.houses?.length === 1 ? props.houses[0].id : null;
+}
+
+const totalsLabel = computed(() => {
+    if (openHouse.value !== null) {
+        return `Итого · ${houseNames.value.get(openHouse.value) ?? ''}`;
+    }
+
+    return props.house === 'none' ? 'Итого · без дома' : 'Итого';
+});
+
+// Each figure is kept on one line (no-break spaces), so a narrow card wraps
+// between them rather than leaving "сум" on a line of its own.
+const totalsSub = computed(() =>
+    props.totals
+        ? [`доходы ${money(props.totals.income)}`, `расходы ${money(props.totals.expense)}`]
+              .map((part) => part.replaceAll(' ', ' '))
+              .join(' · ')
+        : '',
+);
+
+function houseLabel(houseId: number | null): string {
+    return houseId === null ? 'без дома' : (houseNames.value.get(houseId) ?? 'дом');
+}
+
+function targetHasHouses(key: string): boolean {
+    return moveTargets.value.find((s) => s.key === key)?.houses === true;
+}
+
 function today(): string {
     return new Date().toISOString().slice(0, 10);
 }
@@ -32,12 +85,14 @@ const form = useForm<{
     direction: 'income' | 'expense';
     occurred_at: string;
     tagsText: string;
+    house_id: number | null;
 }>({
     body: '',
     amount: '',
     direction: 'expense',
     occurred_at: today(),
     tagsText: '',
+    house_id: defaultHouse(),
 });
 
 const storeUrl = computed(() => `/${props.section.key}/entries`);
@@ -52,6 +107,7 @@ function submit() {
             .split(',')
             .map((t) => t.trim())
             .filter((t) => t.length > 0),
+        house_id: picksHouse.value ? data.house_id : openHouse.value,
     })).post(storeUrl.value, {
         preserveScroll: true,
         onSuccess: () => form.reset('body', 'amount', 'tagsText'),
@@ -70,7 +126,8 @@ const editForm = useForm<{
     amount: string;
     direction: 'income' | 'expense';
     occurred_at: string;
-}>({ section: '', body: '', amount: '', direction: 'expense', occurred_at: '' });
+    house_id: number | null;
+}>({ section: '', body: '', amount: '', direction: 'expense', occurred_at: '', house_id: null });
 
 function startEdit(entry: Entry) {
     editingId.value = entry.id;
@@ -80,12 +137,23 @@ function startEdit(entry: Entry) {
     editForm.amount = entry.amount !== null ? String(Math.abs(entry.amount)) : '';
     editForm.direction = (entry.amount ?? 0) < 0 ? 'expense' : 'income';
     editForm.occurred_at = entry.occurred_at;
+    editForm.house_id = entry.house_id;
     editForm.clearErrors();
 }
 
 function cancelEdit() {
     editingId.value = null;
 }
+
+// Another view is open: the entry being edited is no longer on screen, and
+// the picker starts over rather than carrying a house across views.
+watch(
+    () => props.house,
+    () => {
+        cancelEdit();
+        form.house_id = defaultHouse();
+    },
+);
 
 function targetIsMoney(key: string): boolean {
     return moveTargets.value.find((s) => s.key === key)?.money ?? false;
@@ -98,6 +166,9 @@ function saveEdit(id: number) {
         amount: targetIsMoney(d.section) && d.amount !== '' ? d.amount : null,
         direction: targetIsMoney(d.section) ? d.direction : null,
         occurred_at: d.occurred_at,
+        // Only sent where this page knows the houses; otherwise the server
+        // keeps the entry's house (and drops it for a section without houses).
+        ...(props.houses && targetHasHouses(d.section) ? { house_id: d.house_id } : {}),
     })).put(`/entries/${id}`, {
         preserveScroll: true,
         onSuccess: () => {
@@ -120,6 +191,14 @@ function saveEdit(id: number) {
             </div>
         </div>
 
+        <HouseSwitcher
+            v-if="houses"
+            :section-key="section.key"
+            :houses="houses"
+            :selected="house"
+            :has-unassigned="unassigned !== null"
+        />
+
         <div class="grid gap-6 lg:grid-cols-3">
             <!-- Capture form -->
             <div class="lg:col-span-1">
@@ -127,6 +206,24 @@ function saveEdit(id: number) {
                     class="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900"
                     @submit.prevent="submit"
                 >
+                    <div v-if="picksHouse && houses">
+                        <label class="mb-1 block text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                            Дом
+                        </label>
+                        <select
+                            v-model="form.house_id"
+                            class="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                        >
+                            <option :value="null">Без дома</option>
+                            <option v-for="h in houses" :key="h.id" :value="h.id">
+                                {{ h.name }}
+                            </option>
+                        </select>
+                        <p v-if="form.errors.house_id" class="mt-1 text-xs text-red-600 dark:text-red-400">
+                            {{ form.errors.house_id }}
+                        </p>
+                    </div>
+
                     <div>
                         <label class="mb-1 block text-xs font-medium tracking-wide text-neutral-500 uppercase">
                             Запись
@@ -209,10 +306,19 @@ function saveEdit(id: number) {
                 </form>
 
                 <StatCard
-                    v-if="section.money && total !== null"
+                    v-if="section.money && totals"
                     class="mt-4"
-                    label="Итого"
-                    :value="money(total)"
+                    :label="totalsLabel"
+                    :value="money(totals.net)"
+                    :sub="totalsSub"
+                />
+
+                <HouseTotals
+                    v-if="houses?.length && house === null"
+                    class="mt-4"
+                    :section-key="section.key"
+                    :houses="houses"
+                    :unassigned="unassigned"
                 />
             </div>
 
@@ -239,6 +345,13 @@ function saveEdit(id: number) {
                                 </p>
                                 <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-400">
                                     <span>{{ shortDate(entry.occurred_at) }}</span>
+                                    <span
+                                        v-if="showsHouseOfEntry"
+                                        class="flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                                    >
+                                        <Icon name="home" :size="12" />
+                                        {{ houseLabel(entry.house_id) }}
+                                    </span>
                                     <span
                                         v-if="entry.amount !== null"
                                         class="rounded px-1.5 py-0.5 font-medium tabular-nums"
@@ -296,6 +409,20 @@ function saveEdit(id: number) {
                                     >
                                         <option v-for="t in moveTargets" :key="t.key" :value="t.key">
                                             {{ t.label }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div v-if="houses?.length && targetHasHouses(editForm.section)">
+                                    <label class="mb-1 block text-xs font-medium tracking-wide text-neutral-500 uppercase">
+                                        Дом
+                                    </label>
+                                    <select
+                                        v-model="editForm.house_id"
+                                        class="max-w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:bg-neutral-950 dark:focus:border-neutral-100"
+                                    >
+                                        <option :value="null">Без дома</option>
+                                        <option v-for="h in houses" :key="h.id" :value="h.id">
+                                            {{ h.name }}
                                         </option>
                                     </select>
                                 </div>
